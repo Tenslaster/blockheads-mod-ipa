@@ -50,7 +50,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete sideloadly --yes --cleanup-tag || true
-          gh release create sideloadly Blockheads_1.7_mod.ipa \
-            --title "Sideloadly IPA" \
-            --notes "Unsigned. Open in Sideloadly and sign with your Apple ID."
+          if gh release view sideloadly >/dev/null 2>&1; then
+            gh release upload sideloadly Blockheads_1.7_mod.ipa --clobber
+          else
+            gh release create sideloadly Blockheads_1.7_mod.ipa \
+              --title "Sideloadly IPA" \
+              --notes "Unsigned. Open in Sideloadly and sign with your Apple ID."
+          fi
