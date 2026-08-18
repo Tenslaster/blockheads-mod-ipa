@@ -1,0 +1,52 @@
+name: Build Sideloadly IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download original IPA (release "base")
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p base
+          gh release download base --repo "${{ github.repository }}" --pattern "*.ipa" --dir base
+          ls -lh base
+
+      - name: Patch and pack unsigned IPA
+        run: |
+          python3 scripts/patch_ipa.py \
+            --ipa base/*.ipa \
+            --portal portalChest \
+            --out Blockheads_1.7_mod.ipa \
+            --app work/Payload/Blockheads.app
+          python3 - <<'PY'
+          import struct, zipfile
+          z = zipfile.ZipFile("Blockheads_1.7_mod.ipa")
+          b = z.read("Payload/Blockheads.app/Blockheads")
+          ncmds = struct.unpack_from("<I", b, 16)[0]
+          off = 32
+          segs = []
+          for _ in range(ncmds):
+              cmd, sz = struct.unpack_from("<II", b, off)
+              if cmd == 0x19:
+                  segs.append(b[off+8:off+24].split(b"\x00", 1)[0].decode())
+              off += sz
+          assert segs == ["__PAGEZERO", "__TEXT", "__DATA", "__LINKEDIT"], segs
+          assert ncmds == 44, ncmds
+          print("ok ncmds", ncmds, "segs", segs, "size", len(b))
+          PY
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blockheads_1.7_mod
+          path: Blockheads_1.7_mod.ipa
+          if-no-files-found: error
